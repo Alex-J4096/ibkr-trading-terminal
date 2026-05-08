@@ -7,6 +7,7 @@ class TerminalCommandProvider(Provider):
     async def search(self, query: str) -> Hits:
         commands = [
             ("refresh", "Refresh data now"),
+            ("view_selection", "View selected position, quote, or order details"),
             ("buy", "Open buy order ticket for selected symbol"),
             ("sell", "Open sell order ticket for selected symbol"),
             ("flatten", "Flatten selected position"),

@@ -26,19 +26,36 @@ class IBGatewayClient:
             self.ib.disconnect()
 
     async def place_market_order(
-        self, symbol: str, side: str, quantity: float
+        self,
+        symbol: str,
+        side: str,
+        quantity: float,
+        tif: str = "DAY",
+        outside_rth: bool = False,
     ) -> int:
         await self._ensure_connected()
         contract = await self._qualify_stock(symbol)
-        trade = self.ib.placeOrder(contract, MarketOrder(side, quantity))
+        order = MarketOrder(side, quantity)
+        order.tif = tif
+        order.outsideRth = outside_rth
+        trade = self.ib.placeOrder(contract, order)
         return trade.order.orderId
 
     async def place_limit_order(
-        self, symbol: str, side: str, quantity: float, limit_price: float
+        self,
+        symbol: str,
+        side: str,
+        quantity: float,
+        limit_price: float,
+        tif: str = "DAY",
+        outside_rth: bool = False,
     ) -> int:
         await self._ensure_connected()
         contract = await self._qualify_stock(symbol)
-        trade = self.ib.placeOrder(contract, LimitOrder(side, quantity, limit_price))
+        order = LimitOrder(side, quantity, limit_price)
+        order.tif = tif
+        order.outsideRth = outside_rth
+        trade = self.ib.placeOrder(contract, order)
         return trade.order.orderId
 
     async def cancel_order(self, order_id: int) -> None:

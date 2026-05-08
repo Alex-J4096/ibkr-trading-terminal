@@ -40,6 +40,8 @@ class OrderSnapshot:
     status: str
     filled: float
     remaining: float
+    tif: str = "DAY"
+    outside_rth: bool = False
     limit_price: float | None = None
     avg_fill_price: float | None = None
     created_at: datetime | None = None

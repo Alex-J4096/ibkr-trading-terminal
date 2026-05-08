@@ -21,6 +21,8 @@ def build_orders(trades: Iterable[Trade]) -> list[OrderSnapshot]:
                 side=order.action,
                 order_type=order.orderType,
                 quantity=float(order.totalQuantity),
+                tif=order.tif or "DAY",
+                outside_rth=bool(order.outsideRth),
                 limit_price=float(order.lmtPrice) if order.lmtPrice else None,
                 status=status.status,
                 filled=float(status.filled),

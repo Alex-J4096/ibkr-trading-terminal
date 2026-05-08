@@ -19,7 +19,7 @@ from .state import AppStateStore
 from .ui.command_palette import TerminalCommandProvider
 from .ui.screens import ConfirmModal, InfoModal, OrderTicketModal
 from .ui.tables import OrdersTable, PositionsTable, WatchlistTable
-from .ui.widgets import StatusBar
+from .ui.widgets import AccountSummaryWidget, StatusBar
 
 
 class IBKRTerminalApp(App[None]):
@@ -33,8 +33,14 @@ class IBKRTerminalApp(App[None]):
         height: 1fr;
         padding: 1 2;
     }
-    #top-panel {
+    #top-row {
         height: 1fr;
+    }
+    #positions-panel {
+        width: 2fr;
+    }
+    #account-panel {
+        width: 1fr;
     }
     #bottom-row {
         height: 18;
@@ -61,7 +67,7 @@ class IBKRTerminalApp(App[None]):
         color: #d7e3f4;
     }
     #modal-body {
-        width: 48;
+        width: 64;
         padding: 1 2;
         border: round #29526d;
         background: #112131;
@@ -74,12 +80,16 @@ class IBKRTerminalApp(App[None]):
     #modal-message {
         margin-bottom: 1;
     }
+    #account-summary {
+        content-align: left top;
+    }
     """
 
     BINDINGS = [
         Binding("q", "quit", "Quit"),
         Binding("r", "refresh", "Refresh"),
         Binding("tab", "cycle_panel", "Next Panel"),
+        Binding("enter", "view_selection", "View"),
         Binding("b", "buy", "Buy"),
         Binding("s", "sell", "Sell"),
         Binding("x", "flatten", "Flatten"),
@@ -107,13 +117,18 @@ class IBKRTerminalApp(App[None]):
         self._position_symbols: list[str] = []
         self._watchlist_symbols: list[str] = list(settings.ui.watchlist)
         self._order_ids: list[int] = []
+        self._last_snapshot = AppStateSnapshot()
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
         with Container(id="main-grid"):
-            with Vertical(id="top-panel", classes="panel"):
-                yield Static("Positions", classes="panel-title")
-                yield PositionsTable()
+            with Horizontal(id="top-row"):
+                with Vertical(id="positions-panel", classes="panel"):
+                    yield Static("Positions", classes="panel-title")
+                    yield PositionsTable()
+                with Vertical(id="account-panel", classes="panel"):
+                    yield Static("Account Summary", classes="panel-title")
+                    yield AccountSummaryWidget(id="account-summary")
             with Horizontal(id="bottom-row"):
                 with Vertical(classes="panel"):
                     yield Static("Watchlist", classes="panel-title")
@@ -139,9 +154,16 @@ class IBKRTerminalApp(App[None]):
         await self._run_refresh()
 
     def action_cycle_panel(self) -> None:
-        tables = [self.query_one(PositionsTable), self.query_one(WatchlistTable), self.query_one(OrdersTable)]
+        tables = [
+            self.query_one(PositionsTable),
+            self.query_one(WatchlistTable),
+            self.query_one(OrdersTable),
+        ]
         current_index = next((index for index, table in enumerate(tables) if table.has_focus), -1)
         tables[(current_index + 1) % len(tables)].focus()
+
+    def action_view_selection(self) -> None:
+        self._show_selection_details()
 
     def action_buy(self) -> None:
         self._action_buy()
@@ -152,7 +174,7 @@ class IBKRTerminalApp(App[None]):
         if symbol is None:
             self.push_screen(InfoModal("No symbol selected"))
             return
-        request = await self.push_screen_wait(OrderTicketModal(symbol, "BUY"))
+        request = await self.push_screen_wait(OrderTicketModal(symbol, "BUY", self.state))
         if request is None:
             return
         await self._confirm_and_submit(request)
@@ -166,7 +188,7 @@ class IBKRTerminalApp(App[None]):
         if symbol is None:
             self.push_screen(InfoModal("No symbol selected"))
             return
-        request = await self.push_screen_wait(OrderTicketModal(symbol, "SELL"))
+        request = await self.push_screen_wait(OrderTicketModal(symbol, "SELL", self.state))
         if request is None:
             return
         await self._confirm_and_submit(request)
@@ -216,15 +238,23 @@ class IBKRTerminalApp(App[None]):
         self._render_state(snapshot)
 
     def _render_state(self, snapshot: AppStateSnapshot) -> None:
+        self._last_snapshot = snapshot
         self._render_positions(snapshot)
+        self._render_account_summary(snapshot)
         self._render_watchlist(snapshot)
         self._render_orders(snapshot)
         self._render_status(snapshot)
 
     def _render_positions(self, snapshot: AppStateSnapshot) -> None:
         table = self.query_one(PositionsTable)
+        cursor_row = table.cursor_row
         table.clear()
         self._position_symbols = list(snapshot.positions.keys())
+        if not snapshot.positions:
+            table.add_row("-", "-", "-", "-", "-", "No positions", "-")
+            table.cursor_type = "row"
+            self._restore_cursor(table, cursor_row, 1)
+            return
         for position in snapshot.positions.values():
             table.add_row(
                 position.symbol,
@@ -235,9 +265,27 @@ class IBKRTerminalApp(App[None]):
                 self._fmt_signed(position.unrealized_pnl, colorize=True),
                 self._fmt_percent(position.pnl_percent, colorize=True),
             )
+        self._restore_cursor(table, cursor_row, len(self._position_symbols))
+
+    def _render_account_summary(self, snapshot: AppStateSnapshot) -> None:
+        summary = snapshot.account_summary
+        lines = [
+            f"Account: {summary.account_id or '-'}",
+            f"Currency: {summary.currency or '-'}",
+            "",
+            f"Net Liq: {self._fmt_number(summary.net_liquidation)}",
+            f"Available: {self._fmt_number(summary.available_funds)}",
+            f"Buying Power: {self._fmt_number(summary.buying_power)}",
+            f"Cash: {self._fmt_number(summary.cash_value)}",
+            "",
+            f"Positions: {len(snapshot.positions)}",
+            f"Open Orders: {len(snapshot.orders)}",
+        ]
+        self.query_one(AccountSummaryWidget).update("\n".join(lines))
 
     def _render_watchlist(self, snapshot: AppStateSnapshot) -> None:
         table = self.query_one(WatchlistTable)
+        cursor_row = table.cursor_row
         table.clear()
         for symbol in self.settings.ui.watchlist:
             quote = snapshot.quotes.get(symbol)
@@ -251,11 +299,17 @@ class IBKRTerminalApp(App[None]):
                 self._fmt_percent(quote.change_percent, colorize=True),
                 quote.data_status,
             )
+        self._restore_cursor(table, cursor_row, len(self._watchlist_symbols))
 
     def _render_orders(self, snapshot: AppStateSnapshot) -> None:
         table = self.query_one(OrdersTable)
+        cursor_row = table.cursor_row
         table.clear()
         self._order_ids = [order.order_id for order in snapshot.orders]
+        if not snapshot.orders:
+            table.add_row("-", "-", "-", "-", "-", "-", "No open orders", "-", "-")
+            self._restore_cursor(table, cursor_row, 1)
+            return
         for order in snapshot.orders:
             table.add_row(
                 str(order.order_id),
@@ -268,11 +322,13 @@ class IBKRTerminalApp(App[None]):
                 self._fmt_number(order.filled, 0),
                 self._fmt_number(order.remaining, 0),
             )
+        self._restore_cursor(table, cursor_row, len(self._order_ids))
 
     def _render_status(self, snapshot: AppStateSnapshot) -> None:
         status_bar = self.query_one(StatusBar)
         account_id = snapshot.account_summary.account_id or "-"
         mode = self.settings.trading.account_mode.upper()
+        selected = self._selected_symbol() or "-"
         refreshed = (
             snapshot.last_refresh.astimezone().strftime("%H:%M:%S")
             if snapshot.last_refresh
@@ -287,6 +343,7 @@ class IBKRTerminalApp(App[None]):
                     f"Quotes: {snapshot.market_data_status.upper()}",
                     f"Account: {account_id}",
                     f"Mode: {mode}",
+                    f"Selected: {selected}",
                     f"Last Refresh: {refreshed}",
                 ]
             )
@@ -294,10 +351,84 @@ class IBKRTerminalApp(App[None]):
             + error
         )
 
+    def _show_selection_details(self) -> None:
+        if self.query_one(OrdersTable).has_focus:
+            order_id = self._selected_order_id()
+            order = next(
+                (item for item in self._last_snapshot.orders if item.order_id == order_id),
+                None,
+            )
+            if order is None:
+                self.push_screen(InfoModal("No order selected"))
+                return
+            message = "\n".join(
+                [
+                    f"Order {order.order_id} | {order.symbol}",
+                    f"Side: {order.side}",
+                    f"Type: {order.order_type}",
+                    f"TIF: {order.tif}",
+                    f"Outside RTH: {'Yes' if order.outside_rth else 'No'}",
+                    f"Qty: {self._fmt_number(order.quantity, 0)}",
+                    f"Limit: {self._fmt_number(order.limit_price)}",
+                    f"Status: {order.status}",
+                    f"Filled: {self._fmt_number(order.filled, 0)}",
+                    f"Remaining: {self._fmt_number(order.remaining, 0)}",
+                    f"Avg Fill: {self._fmt_number(order.avg_fill_price)}",
+                    f"Account: {order.account_id or '-'}",
+                ]
+            )
+            self.push_screen(InfoModal(message))
+            return
+
+        symbol = self._selected_symbol()
+        if symbol is None:
+            self.push_screen(InfoModal("No symbol selected"))
+            return
+
+        position = self._last_snapshot.positions.get(symbol)
+        quote = self._last_snapshot.quotes.get(symbol)
+        lines = [f"Symbol: {symbol}"]
+        if position is not None:
+            lines.extend(
+                [
+                    f"Qty: {self._fmt_number(position.quantity, 0)}",
+                    f"Avg Cost: {self._fmt_number(position.average_cost)}",
+                    f"Market Value: {self._fmt_number(position.market_value)}",
+                    f"PnL: {self._fmt_signed_text(position.unrealized_pnl)}",
+                    f"PnL %: {self._fmt_percent_text(position.pnl_percent)}",
+                    f"Currency: {position.currency}",
+                ]
+            )
+        else:
+            lines.append("Qty: Not currently held")
+
+        if quote is not None:
+            lines.extend(
+                [
+                    "",
+                    f"Last: {self._fmt_number(quote.last_price)}",
+                    f"Bid: {self._fmt_number(quote.bid)}",
+                    f"Ask: {self._fmt_number(quote.ask)}",
+                    f"Change: {self._fmt_signed_text(quote.change)}",
+                    f"Change %: {self._fmt_percent_text(quote.change_percent)}",
+                    f"Status: {quote.data_status}",
+                ]
+            )
+        self.push_screen(InfoModal("\n".join(lines)))
+
+    @staticmethod
+    def _restore_cursor(table, previous_row: int, row_count: int) -> None:
+        if row_count <= 0:
+            return
+        target = max(0, min(row_count - 1, previous_row))
+        table.move_cursor(row=target)
+
     async def _confirm_and_submit(self, request) -> None:
         confirmation = (
-            f"{request.side} {request.quantity:g} {request.symbol} {request.order_type}"
+            f"{request.side} {request.quantity:g} {request.symbol} {request.order_type} {request.tif}"
         )
+        if request.outside_rth:
+            confirmation += " outsideRth"
         if request.limit_price is not None:
             confirmation += f" @ {request.limit_price:,.2f}"
         confirmed = await self.push_screen_wait(ConfirmModal(f"Submit {confirmation}?"))
@@ -370,6 +501,18 @@ class IBKRTerminalApp(App[None]):
         if not colorize:
             return rendered
         return Text(rendered, style=self._value_style(value))
+
+    @staticmethod
+    def _fmt_percent_text(value: float | None) -> str:
+        if value is None:
+            return "-"
+        return f"{value:+.2f}%"
+
+    @staticmethod
+    def _fmt_signed_text(value: float | None) -> str:
+        if value is None:
+            return "-"
+        return f"{value:+,.2f}"
 
     def _value_style(self, value: float) -> str:
         if value == 0:

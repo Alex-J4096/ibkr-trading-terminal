@@ -13,6 +13,8 @@ class OrderRequest:
     side: str
     quantity: float
     order_type: str
+    tif: str = "DAY"
+    outside_rth: bool = False
     limit_price: float | None = None
 
 
@@ -45,6 +47,8 @@ class OrderService:
                 request.symbol,
                 request.side,
                 request.quantity,
+                request.tif,
+                request.outside_rth,
             )
         elif request.order_type == "LMT" and request.limit_price is not None:
             order_id = await self.ib_client.place_limit_order(
@@ -52,12 +56,18 @@ class OrderService:
                 request.side,
                 request.quantity,
                 request.limit_price,
+                request.tif,
+                request.outside_rth,
             )
         else:
             raise ValueError(f"Unsupported order type {request.order_type}")
 
         self.risk_manager.record_order(request.symbol)
-        return f"Submitted order {order_id}: {request.side} {request.quantity:g} {request.symbol} {request.order_type}"
+        return (
+            f"Submitted order {order_id}: {request.side} {request.quantity:g} "
+            f"{request.symbol} {request.order_type} {request.tif}"
+            f"{' outsideRth' if request.outside_rth else ''}"
+        )
 
     async def flatten_position(self, symbol: str) -> str:
         snapshot = await self.state.snapshot()
@@ -71,6 +81,8 @@ class OrderService:
             symbol,
             side,
             abs(position.quantity),
+            "DAY",
+            False,
         )
         self.risk_manager.record_order(symbol)
         return f"Submitted flatten order {order_id}: {side} {abs(position.quantity):g} {symbol}"
