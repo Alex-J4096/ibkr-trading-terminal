@@ -13,7 +13,7 @@
 1. 首次拉取后先生成配置：
 
 ```bash
-PYTHONPATH=src python scripts/generate_config.py
+python scripts/generate_config.py
 ```
 
 2. 编辑 `config.toml`，填写 `[market_data].api_key`，并确认 `[ibkr]` 的 `host` / `port` / `client_id`。
@@ -22,18 +22,6 @@ PYTHONPATH=src python scripts/generate_config.py
 
 ```bash
 python run.py
-```
-
-或：
-
-```bash
-PYTHONPATH=src python -m ibkr_tui.main
-```
-
-安装后也可以：
-
-```bash
-ibkr-tui
 ```
 
 ## 说明
