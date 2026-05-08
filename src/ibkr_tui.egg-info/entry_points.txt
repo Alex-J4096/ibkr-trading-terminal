@@ -1,0 +1,2 @@
+[console_scripts]
+ibkr-tui = ibkr_tui.main:main

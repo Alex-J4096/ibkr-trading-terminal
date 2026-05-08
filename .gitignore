@@ -1,0 +1,9 @@
+.venv/
+config.toml
+.pytest_cache/
+.pytest_tmp/
+pytest-cache-files-*/
+__pycache__/
+*.pyc
+*.pyo
+ibkr_tui_trading_terminal_dev_plan.md
