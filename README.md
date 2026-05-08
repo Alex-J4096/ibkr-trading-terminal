@@ -33,6 +33,4 @@ ibkr-tui
 
 ## 说明
 
-- 首版默认只读，不下单。
-- 若未连接到 IB Gateway，界面会显示断线状态，不会直接崩溃。
 - 行情由 Finnhub WebSocket 提供，IB 仅负责账户、持仓和挂单。
