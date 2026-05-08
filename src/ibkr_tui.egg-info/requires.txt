@@ -1,8 +1,0 @@
-finnhub-python>=2.4.25
-ib-insync>=0.9.86
-pydantic>=2.8
-textual>=0.62
-websockets>=16.0
-
-[dev]
-pytest>=8.0
