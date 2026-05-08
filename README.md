@@ -1,12 +1,12 @@
-# IBKR TUI Trading Terminal
+# IBKR Trading Terminal
 
 本仓库当前实现了开发计划第一阶段的基础骨架：
 
-- Textual 主界面
+- 主界面
 - IB Gateway 自动连接
-- 持仓、观察列表、挂单只读视图
+- 持仓、观察列表、挂单、账户信息
 - Finnhub 实时行情刷新
-- 中央状态管理
+- 快速买入、卖出和平仓等交易功能
 
 ## 运行
 
