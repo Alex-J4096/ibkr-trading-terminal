@@ -10,8 +10,13 @@
 
 ## 运行
 
-1. 准备 `config.toml`，可以从 `config.example.toml` 复制。
-2. 准备 `FINNHUB_API_KEY`，或在 `config.toml` 里填写 `[market_data].api_key`。
+1. 首次拉取后先生成配置：
+
+```bash
+PYTHONPATH=src python scripts/generate_config.py
+```
+
+2. 编辑 `config.toml`，填写 `[market_data].api_key`，并确认 `[ibkr]` 的 `host` / `port` / `client_id`。
 3. 启动本地 IB Gateway 或 TWS API。
 4. 直接运行：
 
@@ -34,3 +39,4 @@ ibkr-tui
 ## 说明
 
 - 行情由 Finnhub WebSocket 提供，IB 仅负责账户、持仓和挂单。
+- `scripts/generate_config.py` 默认不会覆盖已有 `config.toml`；如需重建，使用 `--force`。
