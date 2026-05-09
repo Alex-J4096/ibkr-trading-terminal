@@ -93,12 +93,6 @@ python scripts/init_db.py
 python run.py
 ```
 
-如果以后通过安装包分发，也可以直接使用：
-
-```bash
-ibkr-tui
-ibkr-tui-init-db
-```
 
 ## 说明
 
