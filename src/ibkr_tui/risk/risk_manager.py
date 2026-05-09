@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
-from ..config import Settings
+from ..config import Settings, infer_account_mode
 from ..models import AppStateSnapshot
 
 
@@ -105,6 +105,26 @@ class RiskManager:
             side=side,
             quantity=abs(position.quantity),
             order_type="MKT",
+        )
+
+    def validate_flatten_all(self, snapshot: AppStateSnapshot) -> RiskCheckResult:
+        if not snapshot.positions:
+            return RiskCheckResult(False, "Trading blocked: no positions to flatten")
+        for symbol, position in snapshot.positions.items():
+            if position.quantity == 0:
+                continue
+            result = self.validate_flatten(snapshot, symbol=symbol)
+            if not result.ok:
+                return result
+        return RiskCheckResult(True, "Flatten all passed risk checks")
+
+    def effective_account_mode(self) -> str:
+        return infer_account_mode(self.settings)
+
+    def requires_live_confirmation(self) -> bool:
+        return (
+            self.effective_account_mode() == "live"
+            and self.settings.trading.confirm_live_orders
         )
 
     def record_order(self, symbol: str) -> None:

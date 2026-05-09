@@ -53,6 +53,14 @@ class Settings(BaseModel):
     ui: UIConfig = Field(default_factory=UIConfig)
 
 
+def infer_account_mode(settings: Settings) -> Literal["paper", "live"]:
+    if settings.ibkr.port in {4001, 7496}:
+        return "live"
+    if settings.ibkr.port in {4002, 7497}:
+        return "paper"
+    return settings.trading.account_mode
+
+
 def load_settings(path: str | Path | None = None) -> Settings:
     config_path = Path(path) if path is not None else Path("config.toml")
     if not config_path.exists():

@@ -23,6 +23,7 @@ dev = [
 
 [project.scripts]
 ibkr-tui = "ibkr_tui.main:main"
+ibkr-tui-init-db = "ibkr_tui.init_db:main"
 
 [tool.setuptools.package-dir]
 "" = "src"

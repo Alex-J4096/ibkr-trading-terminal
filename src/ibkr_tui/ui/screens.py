@@ -42,6 +42,35 @@ class ConfirmModal(ModalScreen[bool]):
         self.dismiss(event.button.id == "confirm")
 
 
+class ConfirmTextModal(ModalScreen[bool]):
+    def __init__(self, message: str, *, confirm_text: str = "CONFIRM") -> None:
+        super().__init__()
+        self.message = message
+        self.confirm_text = confirm_text
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="modal-body"):
+            yield Static(self.message, id="modal-message")
+            yield Input(placeholder=self.confirm_text, id="confirm-text")
+            yield Button("Confirm", variant="error", id="confirm")
+            yield Button("Cancel", id="cancel")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "cancel":
+            self.dismiss(False)
+            return
+        if event.button.id != "confirm":
+            return
+        typed = self.query_one("#confirm-text", Input).value.strip().upper()
+        if typed != self.confirm_text.upper():
+            self.app.notify(
+                f"Type {self.confirm_text} to confirm",
+                severity="error",
+            )
+            return
+        self.dismiss(True)
+
+
 class OrderTicketModal(ModalScreen[OrderRequest | None]):
     def __init__(self, symbol: str, side: str, state: AppStateStore) -> None:
         super().__init__()

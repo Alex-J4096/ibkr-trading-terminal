@@ -10,7 +10,7 @@ from ..models import AccountSummarySnapshot, OrderSnapshot, PositionSnapshot
 from ..state import AppStateStore
 from .account import apply_account_id, build_account_summary, build_positions
 from .finnhub_client import FinnhubMarketDataClient
-from .orders import build_orders
+from .orders import build_orders, merge_order_snapshots
 
 
 class IBGatewayClient:
@@ -123,8 +123,14 @@ class IBGatewayClient:
         return build_positions(stock_positions, quote_map)
 
     async def _refresh_orders(self) -> list[OrderSnapshot]:
-        trades = await self.ib.reqAllOpenOrdersAsync()
-        return build_orders(trades)
+        open_trades = await self.ib.reqAllOpenOrdersAsync()
+        recent_trades = self.ib.trades()
+        return merge_order_snapshots(
+            [
+                *build_orders(open_trades),
+                *build_orders(recent_trades),
+            ]
+        )
 
     async def _qualify_stock(self, symbol: str) -> Contract:
         contracts = await self.ib.qualifyContractsAsync(Stock(symbol, "SMART", "USD"))

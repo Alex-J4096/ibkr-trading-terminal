@@ -11,13 +11,14 @@ from textual.widgets import Footer, Header, Static
 
 from .broker.finnhub_client import FinnhubMarketDataClient
 from .broker.ib_client import IBGatewayClient, RefreshController
-from .config import Settings
+from .config import Settings, infer_account_mode
 from .models import AppStateSnapshot
 from .order_service import OrderService
 from .risk import RiskManager
 from .state import AppStateStore
+from .storage.sqlite_store import SQLiteStore, TradeLogEntry
 from .ui.command_palette import TerminalCommandProvider
-from .ui.screens import ConfirmModal, InfoModal, OrderTicketModal
+from .ui.screens import ConfirmModal, ConfirmTextModal, InfoModal, OrderTicketModal
 from .ui.tables import OrdersTable, PositionsTable, WatchlistTable
 from .ui.widgets import AccountSummaryWidget, StatusBar
 
@@ -93,7 +94,9 @@ class IBKRTerminalApp(App[None]):
         Binding("b", "buy", "Buy"),
         Binding("s", "sell", "Sell"),
         Binding("x", "flatten", "Flatten"),
+        Binding("X", "flatten_all", "Flatten All"),
         Binding("c", "cancel_order", "Cancel"),
+        Binding("C", "cancel_all_orders", "Cancel All"),
         Binding("/", "command_palette", "Command"),
     ]
 
@@ -105,7 +108,13 @@ class IBKRTerminalApp(App[None]):
         self.state = AppStateStore()
         self.ib_client = IBGatewayClient(settings)
         self.risk_manager = RiskManager(settings)
-        self.order_service = OrderService(self.ib_client, self.risk_manager, self.state)
+        self.store = SQLiteStore()
+        self.order_service = OrderService(
+            self.ib_client,
+            self.risk_manager,
+            self.state,
+            self.store,
+        )
         self.refresh_controller = RefreshController(
             self.ib_client,
             FinnhubMarketDataClient(settings),
@@ -212,6 +221,32 @@ class IBKRTerminalApp(App[None]):
             return
         await self._run_trade_action(lambda: self.order_service.flatten_position(symbol))
 
+    def action_flatten_all(self) -> None:
+        self._action_flatten_all()
+
+    @work(exclusive=True, group="trading", exit_on_error=False)
+    async def _action_flatten_all(self) -> None:
+        snapshot = await self.state.snapshot()
+        if not snapshot.positions:
+            self.push_screen(InfoModal("No positions to flatten"))
+            return
+        confirmed = await self.push_screen_wait(
+            ConfirmModal(
+                f"Flatten all positions ({len(snapshot.positions)}) at market?"
+            )
+        )
+        if not confirmed:
+            return
+        final_confirmed = await self.push_screen_wait(
+            ConfirmTextModal(
+                "Type CONFIRM to flatten all positions",
+                confirm_text="CONFIRM",
+            )
+        )
+        if not final_confirmed:
+            return
+        await self._run_trade_action(self.order_service.flatten_all_positions)
+
     def action_cancel_order(self) -> None:
         self._action_cancel_order()
 
@@ -227,6 +262,31 @@ class IBKRTerminalApp(App[None]):
         if not confirmed:
             return
         await self._run_trade_action(lambda: self.order_service.cancel_order(order_id))
+
+    def action_cancel_all_orders(self) -> None:
+        self._action_cancel_all_orders()
+
+    @work(exclusive=True, group="trading", exit_on_error=False)
+    async def _action_cancel_all_orders(self) -> None:
+        if not self._order_ids:
+            self.push_screen(InfoModal("No open orders to cancel"))
+            return
+        confirmed = await self.push_screen_wait(
+            ConfirmModal(f"Cancel all open orders ({len(self._order_ids)})?")
+        )
+        if not confirmed:
+            return
+        final_confirmed = await self.push_screen_wait(
+            ConfirmTextModal(
+                "Type CONFIRM to cancel all open orders",
+                confirm_text="CONFIRM",
+            )
+        )
+        if not final_confirmed:
+            return
+        await self._run_trade_action(
+            lambda: self.order_service.cancel_all_orders(list(self._order_ids))
+        )
 
     def _queue_refresh(self) -> None:
         if self._refresh_task is None or self._refresh_task.done():
@@ -327,7 +387,7 @@ class IBKRTerminalApp(App[None]):
     def _render_status(self, snapshot: AppStateSnapshot) -> None:
         status_bar = self.query_one(StatusBar)
         account_id = snapshot.account_summary.account_id or "-"
-        mode = self.settings.trading.account_mode.upper()
+        mode = infer_account_mode(self.settings).upper()
         selected = self._selected_symbol() or "-"
         refreshed = (
             snapshot.last_refresh.astimezone().strftime("%H:%M:%S")
@@ -434,6 +494,15 @@ class IBKRTerminalApp(App[None]):
         confirmed = await self.push_screen_wait(ConfirmModal(f"Submit {confirmation}?"))
         if not confirmed:
             return
+        if self.risk_manager.requires_live_confirmation():
+            live_confirmed = await self.push_screen_wait(
+                ConfirmTextModal(
+                    f"LIVE account detected. Type CONFIRM to submit {request.symbol}",
+                    confirm_text="CONFIRM",
+                )
+            )
+            if not live_confirmed:
+                return
         await self._run_trade_action(lambda: self.order_service.submit_order(request))
 
     async def _run_trade_action(self, action) -> None:
@@ -443,6 +512,14 @@ class IBKRTerminalApp(App[None]):
             self.notify(message)
             await self._run_refresh()
         except Exception as exc:
+            self.store.log_trade_event(
+                TradeLogEntry(
+                    event_type="trade_action",
+                    status="api_error",
+                    message=str(exc),
+                    account_mode=infer_account_mode(self.settings),
+                )
+            )
             snapshot = await self.state.snapshot()
             await self.state.update_connection(
                 snapshot.connection_status,

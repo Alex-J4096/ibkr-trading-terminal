@@ -11,7 +11,9 @@ class TerminalCommandProvider(Provider):
             ("buy", "Open buy order ticket for selected symbol"),
             ("sell", "Open sell order ticket for selected symbol"),
             ("flatten", "Flatten selected position"),
+            ("flatten_all", "Flatten all positions with strong confirmation"),
             ("cancel_order", "Cancel selected open order"),
+            ("cancel_all_orders", "Cancel all open orders with strong confirmation"),
             ("quit", "Quit application"),
         ]
         for name, help_text in commands:

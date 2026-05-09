@@ -79,3 +79,11 @@ def test_risk_manager_enforces_cooldown() -> None:
 def test_risk_manager_validates_flatten_position() -> None:
     result = RiskManager(make_settings()).validate_flatten(make_snapshot(), symbol="AAPL")
     assert result.ok
+
+
+def test_risk_manager_detects_live_mode_from_port() -> None:
+    settings = make_settings()
+    settings.ibkr.port = 4001
+    manager = RiskManager(settings)
+    assert manager.effective_account_mode() == "live"
+    assert manager.requires_live_confirmation()
