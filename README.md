@@ -38,12 +38,12 @@
 | Symbol  Last   Change   Chg%   Status       | ID   Sym   Side Type Qty Status    |
 | AMD     142.2  +1.70    +1.2   REALTIME     | 101  NVDA  BUY  LMT  10  Submitted |
 | MSFT    421.5  -1.31    -0.3   REALTIME     | 102  AAPL  SELL MKT   5  Filled    |
-| TSLA    174.8  +3.44    +2.0   REALTIME     |                                     |
+| TSLA    174.8  +3.44    +2.0   REALTIME     |                                    |
 +----------------------------------------------------------------------------------+
-| IB: CONNECTED | Quotes: CONNECTED | Account: DUxxxxxx | Mode: PAPER | ...       |
+| IB: CONNECTED | Quotes: CONNECTED | Account: DUxxxxxx | Mode: PAPER | ...        |
 +----------------------------------------------------------------------------------+
 | q Quit | r Refresh | Tab Next Panel | Enter View | b Buy | s Sell | x Flatten    |
-| X Flatten All | c Cancel | C Cancel All | / Command                                 |
+| X Flatten All | c Cancel | C Cancel All | / Command                              |
 +----------------------------------------------------------------------------------+
 ```
 
